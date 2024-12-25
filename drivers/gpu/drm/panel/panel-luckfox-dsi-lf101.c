@@ -19,7 +19,7 @@
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_panel.h>
 
-#define LF_DSI_DRIVER_NAME "panel-luckfox-dsi-lf101"
+#define LF_DSI_DRIVER_NAME "panel-lf-dsi-lf101"
 
 struct lf_panel {
 	struct drm_panel base;
@@ -69,7 +69,7 @@ static int lf_panel_disable(struct drm_panel *panel)
 
 	int ret = mipi_dsi_dcs_set_display_off(dsi);
 	if (ret) {
-		dev_err(dsi->dev, "failed to turn display off (%d)\n", ret);
+		dev_err(&dsi->dev, "failed to turn display off (%d)\n", ret);
 		return ret;
 	}
 
@@ -84,7 +84,7 @@ static int lf_panel_unprepare(struct drm_panel *panel)
 	/* Enter sleep mode */
 	int ret = mipi_dsi_dcs_enter_sleep_mode(dsi);
 	if (ret) {
-		dev_err(dsi->dev, "failed to enter sleep mode (%d)\n", ret);
+		dev_err(&dsi->dev, "failed to enter sleep mode (%d)\n", ret);
 		return ret;
 	}
 
@@ -99,7 +99,7 @@ static int lf_panel_prepare(struct drm_panel *panel)
 	/* Exit sleep mode and power on */
 	int ret = mipi_dsi_dcs_exit_sleep_mode(dsi);
 	if (ret) {
-		dev_err(dsi->dev, "failed to exit sleep mode (%d)\n", ret);
+		dev_err(&dsi->dev, "failed to exit sleep mode (%d)\n", ret);
 		return ret;
 	}
 
@@ -113,7 +113,7 @@ static int lf_panel_enable(struct drm_panel *panel)
 
 	int ret = mipi_dsi_dcs_set_display_on(dsi);
 	if (ret) {
-		dev_err(dsi->dev, "failed to turn display on (%d)\n", ret);
+		dev_err(&dsi->dev, "failed to turn display on (%d)\n", ret);
 		return ret;
 	}
 
@@ -177,7 +177,7 @@ static int lf_panel_probe(struct mipi_dsi_device *dsi)
 	struct device_node *endpoint, *dsi_host_node;
 	struct mipi_dsi_host *host;
 	struct mipi_dsi_device_info info = {
-		.type = WS_DSI_DRIVER_NAME,
+		.type = LF_DSI_DRIVER_NAME,
 		.channel = 0,
 		.node = NULL,
 	};
