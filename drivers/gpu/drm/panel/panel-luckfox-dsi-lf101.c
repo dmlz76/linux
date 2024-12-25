@@ -54,7 +54,7 @@ static const struct drm_display_mode LF101_8001280_AMA_mode = {
 static const struct lf_panel_data LF101_8001280_AMA_data = {
 	.mode = &LF101_8001280_AMA_mode,
 	.lanes = 4,
-	.mode_flags = MIPI_DSI_MODE_VIDEO,
+	.mode_flags = MIPI_DSI_MODE_VIDEO_HSE | MIPI_DSI_MODE_VIDEO | MIPI_DSI_CLOCK_NON_CONTINUOUS,
 };
 
 static struct lf_panel *panel_to_ts(struct drm_panel *panel)
@@ -78,6 +78,7 @@ static int lf_panel_disable(struct drm_panel *panel)
 
 static int lf_panel_unprepare(struct drm_panel *panel)
 {
+#if 0
 	struct lf_panel *ts = panel_to_ts(panel);
 	struct mipi_dsi_device *dsi = ts->dsi;
 
@@ -87,12 +88,13 @@ static int lf_panel_unprepare(struct drm_panel *panel)
 		dev_err(&dsi->dev, "failed to enter sleep mode (%d)\n", ret);
 		return ret;
 	}
-
+#endif
 	return 0;
 }
 
 static int lf_panel_prepare(struct drm_panel *panel)
 {
+#if 0
 	struct lf_panel *ts = panel_to_ts(panel);
 	struct mipi_dsi_device *dsi = ts->dsi;
 
@@ -102,7 +104,7 @@ static int lf_panel_prepare(struct drm_panel *panel)
 		dev_err(&dsi->dev, "failed to exit sleep mode (%d)\n", ret);
 		return ret;
 	}
-
+#endif
 	return 0;
 }
 
