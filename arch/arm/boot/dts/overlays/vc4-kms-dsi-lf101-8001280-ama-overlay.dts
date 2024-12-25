@@ -1,0 +1,36 @@
+/*
+ * Device Tree overlay to connect a LF101-8001280-AMA DSI panel to DSI1.
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2835";
+
+	fragment@0 {
+		target = <&dsi1>;
+		__overlay__{
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			port {
+				dsi_out_port:endpoint {
+					remote-endpoint = <&panel_dsi_port>;
+				};
+			};
+
+			lf101_8001280_ama@0 {
+				compatible    = "luckfox,lf101-8001280-ama", "panel-luckfox-dsi-lf101";
+				status        = "okay";
+				reg           = <0>;
+				port {
+					panel_dsi_port: endpoint {
+						remote-endpoint = <&dsi_out_port>;
+					};
+				};
+			};
+		};
+	};
+
+};

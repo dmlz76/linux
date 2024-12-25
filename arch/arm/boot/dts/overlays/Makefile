@@ -322,6 +322,7 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	vc4-kms-dsi-generic.dtbo \
 	vc4-kms-dsi-ili9881-5inch.dtbo \
 	vc4-kms-dsi-ili9881-7inch.dtbo \
+	vc4-kms-dsi-lf101-8001280-ama.dtbo \
 	vc4-kms-dsi-lt070me05000.dtbo \
 	vc4-kms-dsi-lt070me05000-v2.dtbo \
 	vc4-kms-dsi-waveshare-800x480.dtbo \
