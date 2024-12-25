@@ -21,7 +21,7 @@
 			};
 
 			lf101_8001280_ama@0 {
-				compatible    = "luckfox,lf101-8001280-ama", "panel-luckfox-dsi-lf101";
+				compatible    = "luckfox,lf101-8001280-ama";
 				status        = "okay";
 				reg           = <0>;
 				port {
