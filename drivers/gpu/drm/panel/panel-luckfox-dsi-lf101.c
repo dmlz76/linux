@@ -25,7 +25,10 @@ struct lf_panel {
 	struct drm_panel base;
 	struct mipi_dsi_device *dsi;
 	const struct drm_display_mode *mode;
+	struct regulator *power;
 	enum drm_panel_orientation orientation;
+	bool prepared;
+	bool enabled;
 };
 
 struct lf_panel_data {
@@ -49,6 +52,7 @@ static const struct drm_display_mode LF101_8001280_AMA_mode = {
 	.vtotal =       1280 + 20 + 4 + 20,     // vactive + vfp + vsync + fbp
     .width_mm =     135,
     .height_mm =    216,
+	.flags =        0,
 };
 
 static const struct lf_panel_data LF101_8001280_AMA_data = {
@@ -57,15 +61,20 @@ static const struct lf_panel_data LF101_8001280_AMA_data = {
 	.mode_flags = MIPI_DSI_MODE_VIDEO_HSE | MIPI_DSI_MODE_VIDEO,
 };
 
-static struct lf_panel *panel_to_ts(struct drm_panel *panel)
+static struct lf_panel *to_lf_panel(struct drm_panel *panel)
 {
 	return container_of(panel, struct lf_panel, base);
 }
 
 static int lf_panel_disable(struct drm_panel *panel)
 {
-	struct lf_panel *ts = panel_to_ts(panel);
-	struct mipi_dsi_device *dsi = ts->dsi;
+	struct lf_panel *lfp = to_lf_panel(panel);
+	if (!lfp->enabled)
+		return 0;
+
+	struct mipi_dsi_device *dsi = lfp->dsi;
+
+	dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
 
 	int ret = mipi_dsi_dcs_set_display_off(dsi);
 	if (ret) {
@@ -73,13 +82,17 @@ static int lf_panel_disable(struct drm_panel *panel)
 		return ret;
 	}
 
+	lfp->enabled = false;
 	return 0;
 }
 
 static int lf_panel_unprepare(struct drm_panel *panel)
 {
-	struct lf_panel *ts = panel_to_ts(panel);
-	struct mipi_dsi_device *dsi = ts->dsi;
+	struct lf_panel *lfp = to_lf_panel(panel);
+	if (!lfp->prepared)
+		return 0;
+
+	struct mipi_dsi_device *dsi = lfp->dsi;
 
 	/* Enter sleep mode */
 	int ret = mipi_dsi_dcs_enter_sleep_mode(dsi);
@@ -87,27 +100,55 @@ static int lf_panel_unprepare(struct drm_panel *panel)
 		dev_err(&dsi->dev, "failed to enter sleep mode (%d)\n", ret);
 		return ret;
 	}
+
+	ret = regulator_disable(lfp->power);
+	if (ret < 0)
+		dev_err(&dsi->dev, "regulator disable failed, %d\n", ret);
+
+	lfp->prepared = false;
 	return 0;
 }
 
 static int lf_panel_prepare(struct drm_panel *panel)
 {
-	struct lf_panel *ts = panel_to_ts(panel);
-	struct mipi_dsi_device *dsi = ts->dsi;
+	struct lf_panel *lfp = to_lf_panel(panel);
+	if (lfp->prepared)
+		return 0;
+	struct mipi_dsi_device *dsi = lfp->dsi;
+
+	/* Power the panel */
+	int ret = regulator_enable(lfp->power);
+	if (ret)
+		return ret;
+	msleep(5);
 
 	/* Exit sleep mode and power on */
-	int ret = mipi_dsi_dcs_exit_sleep_mode(dsi);
+	ret = mipi_dsi_dcs_exit_sleep_mode(dsi);
 	if (ret) {
 		dev_err(&dsi->dev, "failed to exit sleep mode (%d)\n", ret);
-		return ret;
+		goto poweroff;
 	}
+
+	lfp->prepared = true;
 	return 0;
+
+poweroff:
+	ret = regulator_disable(lfp->power);
+	if (ret < 0)
+		dev_err(&dsi->dev, "regulator disable failed, %d\n", ret);
+
+	return ret;	
 }
 
 static int lf_panel_enable(struct drm_panel *panel)
 {
-	struct lf_panel *ts = panel_to_ts(panel);
-	struct mipi_dsi_device *dsi = ts->dsi;
+	struct lf_panel *lfp = to_lf_panel(panel);
+	if (lfp->enabled)
+		return 0;
+
+	struct mipi_dsi_device *dsi = lfp->dsi;
+
+	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
 
 	int ret = mipi_dsi_dcs_set_display_on(dsi);
 	if (ret) {
@@ -115,6 +156,7 @@ static int lf_panel_enable(struct drm_panel *panel)
 		return ret;
 	}
 
+	lfp->enabled = true;
 	return 0;
 }
 
@@ -122,15 +164,15 @@ static int lf_panel_get_modes(struct drm_panel *panel,
 			      struct drm_connector *connector)
 {
 	static const u32 bus_format = MEDIA_BUS_FMT_RGB888_1X24;
-	struct lf_panel *ts = panel_to_ts(panel);
+	struct lf_panel *lfp = to_lf_panel(panel);
 	struct drm_display_mode *mode;
 
-	mode = drm_mode_duplicate(connector->dev, ts->mode);
+	mode = drm_mode_duplicate(connector->dev, lfp->mode);
 	if (!mode) {
 		dev_err(panel->dev, "failed to add mode %ux%u@%u\n",
-			ts->mode->hdisplay,
-			ts->mode->vdisplay,
-			drm_mode_vrefresh(ts->mode));
+			lfp->mode->hdisplay,
+			lfp->mode->vdisplay,
+			drm_mode_vrefresh(lfp->mode));
 	}
 
 	mode->type |= DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
@@ -147,16 +189,16 @@ static int lf_panel_get_modes(struct drm_panel *panel,
 	 * TODO: Remove once all drm drivers call
 	 * drm_connector_set_orientation_from_panel()
 	 */
-	drm_connector_set_panel_orientation(connector, ts->orientation);
+	drm_connector_set_panel_orientation(connector, lfp->orientation);
 
 	return 1;
 }
 
 static enum drm_panel_orientation lf_panel_get_orientation(struct drm_panel *panel)
 {
-	struct lf_panel *ts = panel_to_ts(panel);
+	struct lf_panel *lfp = to_lf_panel(panel);
 
-	return ts->orientation;
+	return lfp->orientation;
 }
 
 static const struct drm_panel_funcs lf_panel_funcs = {
@@ -171,56 +213,64 @@ static const struct drm_panel_funcs lf_panel_funcs = {
 static int lf_panel_probe(struct mipi_dsi_device *dsi)
 {
 	struct device *dev = &dsi->dev;
-	struct lf_panel *ts;
+	struct lf_panel *lfp;
 	const struct lf_panel_data *_lf_panel_data;
 	int ret;
 
-	ts = devm_kzalloc(dev, sizeof(*ts), GFP_KERNEL);
-	if (!ts)
+	lfp = devm_kzalloc(dev, sizeof(*lfp), GFP_KERNEL);
+	if (!lfp)
 		return -ENOMEM;
 
 	_lf_panel_data = of_device_get_match_data(dev);
 	if (!_lf_panel_data)
 		return -EINVAL;
 
-	ts->mode = _lf_panel_data->mode;
-	if (!ts->mode)
+	lfp->mode = _lf_panel_data->mode;
+	if (!lfp->mode)
 		return -EINVAL;
 
-	mipi_dsi_set_drvdata(dsi, ts);
-	ts->dsi = dsi;
+	mipi_dsi_set_drvdata(dsi, lfp);
+	lfp->dsi = dsi;
 
-	ret = of_drm_get_panel_orientation(dev->of_node, &ts->orientation);
+	ret = of_drm_get_panel_orientation(dev->of_node, &lfp->orientation);
 	if (ret) {
 		dev_err(dev, "%pOF: failed to get orientation %d\n", dev->of_node, ret);
 		return ret;
 	}
 
-	drm_panel_init(&ts->base, dev, &lf_panel_funcs, DRM_MODE_CONNECTOR_DSI);
+	lfp->power = devm_regulator_get(&dsi->dev, "power");
+	if (IS_ERR(lfp->power))
+		return dev_err_probe(&dsi->dev, PTR_ERR(lfp->power),
+				     "Couldn't get our power regulator\n");
+
+	drm_panel_init(&lfp->base, dev, &lf_panel_funcs, DRM_MODE_CONNECTOR_DSI);
 
 	/* This appears last, as it's what will unblock the DSI host
 	 * driver's component bind function.
 	 */
-	drm_panel_add(&ts->base);
+	drm_panel_add(&lfp->base);
 
-	ts->dsi->mode_flags = _lf_panel_data->mode_flags;
-	ts->dsi->format = MIPI_DSI_FMT_RGB888;
-	ts->dsi->lanes = _lf_panel_data->lanes;
+	lfp->dsi->mode_flags = _lf_panel_data->mode_flags;
+	lfp->dsi->format = MIPI_DSI_FMT_RGB888;
+	lfp->dsi->lanes = _lf_panel_data->lanes;
 
-	ret = devm_mipi_dsi_attach(dev, ts->dsi);
-
-	if (ret)
+	ret = mipi_dsi_attach(dsi);
+	if (ret < 0) {
 		dev_err(dev, "failed to attach dsi to host: %d\n", ret);
+		drm_panel_remove(&lfp->base);
+		return ret;
+	}
 
 	return 0;
 }
 
 static void lf_panel_remove(struct mipi_dsi_device *dsi)
 {
-	struct lf_panel *ts = mipi_dsi_get_drvdata(dsi);
+	struct lf_panel *lfp = mipi_dsi_get_drvdata(dsi);
 
 	mipi_dsi_detach(dsi);
-	drm_panel_remove(&ts->base);
+	if (lfp->base.dev)
+		drm_panel_remove(&lfp->base);
 }
 
 static const struct of_device_id lf_panel_of_ids[] = {
