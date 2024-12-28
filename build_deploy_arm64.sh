@@ -3,15 +3,28 @@ if [ $# -ne 3 ]; then
     exit 1; 
 fi
 
-num_processors=$(nproc)
-echo "Number of processors: $num_processors" 
+KERNEL_CONFIG=$1
+SDCARD_BOOT_DEVICE=$2
+SDCARD_ROOT_DEVICE=$3
 
-echo "Configuring kernel build for $1"
-make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- $1
+num_processors=$(nproc)
+#echo "Number of processors: $num_processors" 
+
+echo "Configuring kernel build for $KERNEL_CONFIG"
+make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- $KERNEL_CONFIG
 if [ $? -ne 0 ]; then
     echo "Failed to configure kernel"
     exit 1
 fi
+
+KERNEL_NAME="kernel8"
+# version string from CONFIG_LOCALVERSION
+CONFIG_LOCALVERSION=$(sed -n 's/^CONFIG_LOCALVERSION=\(.*\)$/\1/p' .config)
+if [ -n $CONFIG_LOCALVERSION ]; then
+    CONFIG_LOCALVERSION=$(echo $CONFIG_LOCALVERSION | xargs)
+    KERNEL_NAME="kernel${CONFIG_LOCALVERSION}"
+fi
+echo "Kernel name: $KERNEL_NAME"
 
 echo "Building kernel"
 make -j $num_processors ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- Image modules dtbs
@@ -30,12 +43,12 @@ if [ ! -d mnt/root ]; then
     mkdir mnt/root
 fi
 
-sudo mount /dev/$2 mnt/boot
+sudo mount /dev/$SDCARD_BOOT_DEVICE mnt/boot
 if [ $? -ne 0 ]; then
     echo "Failed to mount boot partition"
     exit 1
 fi
-sudo mount /dev/$3 mnt/root
+sudo mount /dev/$SDCARD_ROOT_DEVICE mnt/root
 if [ $? -ne 0 ]; then
     echo "Failed to mount root partition"
     sudo umount mnt/boot
@@ -56,7 +69,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Copying kernel"
-sudo cp -u -v arch/arm64/boot/Image mnt/boot/kernel8-16k-dmlz.img
+sudo cp -u -v arch/arm64/boot/Image mnt/boot/$KERNEL_NAME.img
 if [ $? -ne 0 ]; then
     echo "Failed to copy kernel"
     cleanup
