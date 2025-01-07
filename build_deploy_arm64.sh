@@ -1,11 +1,9 @@
-if [ $# -ne 3 ]; then 
-    echo "Usage: $0 <kernel-configuration> <sdcard-boot-device> <sdcard-root-device>"; 
+if [ $# -lt 1 ]; then 
+    echo "Usage: $0 <kernel-configuration> [<sdcard-boot-device> <sdcard-root-device>]"; 
     exit 1; 
 fi
 
 KERNEL_CONFIG=$1
-SDCARD_BOOT_DEVICE=$2
-SDCARD_ROOT_DEVICE=$3
 
 num_processors=$(nproc)
 #echo "Number of processors: $num_processors" 
@@ -42,6 +40,18 @@ fi
 if [ ! -d mnt/root ]; then
     mkdir mnt/root
 fi
+
+if [ $# -eq 1 ]; then 
+    exit 0; 
+fi
+
+if [ $# -ne 3 ]; then 
+    echo "Usage: $0 <kernel-configuration> <sdcard-boot-device> <sdcard-root-device>"; 
+    exit 1; 
+fi
+
+SDCARD_BOOT_DEVICE=$2
+SDCARD_ROOT_DEVICE=$3
 
 sudo mount /dev/$SDCARD_BOOT_DEVICE mnt/boot
 if [ $? -ne 0 ]; then

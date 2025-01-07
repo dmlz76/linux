@@ -21,11 +21,15 @@
 
 #define LF_DSI_DRIVER_NAME "panel-lf-dsi-lf101"
 
+#define USE_POWER_REGULATOR 0
+
 struct lf_panel {
 	struct drm_panel base;
 	struct mipi_dsi_device *dsi;
 	const struct drm_display_mode *mode;
+#if USE_POWER_REGULATOR
 	struct regulator *power;
+#endif
 	enum drm_panel_orientation orientation;
 	bool prepared;
 	bool enabled;
@@ -101,9 +105,11 @@ static int lf_panel_unprepare(struct drm_panel *panel)
 		return ret;
 	}
 
+#if USE_POWER_REGULATOR
 	ret = regulator_disable(lfp->power);
 	if (ret < 0)
 		dev_err(&dsi->dev, "regulator disable failed, %d\n", ret);
+#endif
 
 	lfp->prepared = false;
 	return 0;
@@ -115,12 +121,15 @@ static int lf_panel_prepare(struct drm_panel *panel)
 	if (lfp->prepared)
 		return 0;
 	struct mipi_dsi_device *dsi = lfp->dsi;
+	int ret;
 
+#if USE_POWER_REGULATOR
 	/* Power the panel */
-	int ret = regulator_enable(lfp->power);
+	ret = regulator_enable(lfp->power);
 	if (ret)
 		return ret;
 	msleep(5);
+#endif
 
 	/* Exit sleep mode and power on */
 	ret = mipi_dsi_dcs_exit_sleep_mode(dsi);
@@ -133,9 +142,11 @@ static int lf_panel_prepare(struct drm_panel *panel)
 	return 0;
 
 poweroff:
+#if USE_POWER_REGULATOR
 	ret = regulator_disable(lfp->power);
 	if (ret < 0)
 		dev_err(&dsi->dev, "regulator disable failed, %d\n", ret);
+#endif
 
 	return ret;	
 }
@@ -238,10 +249,12 @@ static int lf_panel_probe(struct mipi_dsi_device *dsi)
 		return ret;
 	}
 
+#if USE_POWER_REGULATOR
 	lfp->power = devm_regulator_get(&dsi->dev, "power");
 	if (IS_ERR(lfp->power))
 		return dev_err_probe(&dsi->dev, PTR_ERR(lfp->power),
 				     "Couldn't get our power regulator\n");
+#endif
 
 	drm_panel_init(&lfp->base, dev, &lf_panel_funcs, DRM_MODE_CONNECTOR_DSI);
 
