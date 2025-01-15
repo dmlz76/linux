@@ -5,6 +5,8 @@
 /dts-v1/;
 /plugin/;
 
+#include <dt-bindings/gpio/gpio.h>
+
 / {
 	compatible = "brcm,bcm2835";
 
@@ -24,6 +26,7 @@
 				compatible    = "luckfox,lf101-8001280-ama";
 				status        = "okay";
 				reg           = <0>;
+		        reset-gpios   = <&gpio 17 GPIO_ACTIVE_LOW>;           
 				port {
 					panel_dsi_port: endpoint {
 						remote-endpoint = <&dsi_out_port>;
