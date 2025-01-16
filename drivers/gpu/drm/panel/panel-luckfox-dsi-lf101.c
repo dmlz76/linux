@@ -33,11 +33,11 @@
 #define JD9365_CMD_PAGE (0xE0)
 #define JD9365_PAGE_USER (0x00)
 
-#define JD9365_CMD_DSI_INT0 (0x80)
+#define JD9365_CMD_DSI_INIT0 (0x80)
 #define JD9365_DSI_1_LANE (0x00)
 #define JD9365_DSI_2_LANE (0x01)
-#define JD9365_DSI_3_LANE (0x10)
-#define JD9365_DSI_4_LANE (0x11)
+#define JD9365_DSI_3_LANE (0x02)
+#define JD9365_DSI_4_LANE (0x03)
 
 #define JD9365_CMD_GS_BIT (1 << 0)
 #define JD9365_CMD_SS_BIT (1 << 1)
@@ -96,23 +96,34 @@ static const struct drm_display_mode LF101_8001280_AMA_4LANE_mode = {
 
 static const struct LCM_init_cmd LF101_8001280_AMA_4LANE_init_cmds[] = {
 	{REGFLAG_DELAY,10,{}},
+	// Page 0
 	{0xE0,1,{0x00}},
+	// Password
 	{0xE1,1,{0x93}},
 	{0xE2,1,{0x65}},
 	{0xE3,1,{0xF8}},
-	{0x80,1,{0x03}},
+	// Sequence Ctrl
+	{0x80,1,{0x03}}, //0x03:4-Lane；0x02:3-Lane；0x01:2-Lane；0x00:1-Lane
+
+	// Page 1
 	{0xE0,1,{0x01}},
+	// VCOM
 	{0x00,1,{0x00}},
 	{0x01,1,{0x3B}},
+	//
 	{0x0C,1,{0x74}},
+	// Set Gamma Power, VGMP,VGMN,VGSP,VGSN
 	{0x17,1,{0x00}},
 	{0x18,1,{0xAF}},
 	{0x19,1,{0x00}},
 	{0x1A,1,{0x00}},
 	{0x1B,1,{0xAF}},
 	{0x1C,1,{0x00}},
+	// 
 	{0x35,1,{0x26}},
+	// SETPANEL
 	{0x37,1,{0x09}},
+	// SET RGBCYC
 	{0x38,1,{0x04}},
 	{0x39,1,{0x00}},
 	{0x3A,1,{0x01}},
@@ -120,17 +131,21 @@ static const struct LCM_init_cmd LF101_8001280_AMA_4LANE_init_cmds[] = {
 	{0x3D,1,{0xFF}},
 	{0x3E,1,{0xFF}},
 	{0x3F,1,{0x7F}},
+	// TCON
 	{0x40,1,{0x06}},
 	{0x41,1,{0xA0}},
+	//
 	{0x42,1,{0x81}},
 	{0x43,1,{0x14}},
 	{0x44,1,{0x23}},
 	{0x45,1,{0x28}},
+	// Power voltage
 	{0x55,1,{0x02}},
 	{0x57,1,{0x69}},
 	{0x59,1,{0x0A}},
 	{0x5A,1,{0x2A}},
 	{0x5B,1,{0x17}},
+	// Gamma
 	{0x5D,1,{0x7F}},
 	{0x5E,1,{0x6B}},
 	{0x5F,1,{0x5C}},
@@ -169,7 +184,10 @@ static const struct LCM_init_cmd LF101_8001280_AMA_4LANE_init_cmds[] = {
 	{0x80,1,{0x20}},
 	{0x81,1,{0x0F}},
 	{0x82,1,{0x00}},
+
+	// Page 2
 	{0xE0,1,{0x02}},
+	// GIP_L
 	{0x00,1,{0x02}},
 	{0x01,1,{0x02}},
 	{0x02,1,{0x00}},
@@ -192,6 +210,7 @@ static const struct LCM_init_cmd LF101_8001280_AMA_4LANE_init_cmds[] = {
 	{0x13,1,{0x49}},
 	{0x14,1,{0x49}},
 	{0x15,1,{0x1F}},
+	// GIP_R
 	{0x16,1,{0x01}},
 	{0x17,1,{0x01}},
 	{0x18,1,{0x00}},
@@ -214,6 +233,7 @@ static const struct LCM_init_cmd LF101_8001280_AMA_4LANE_init_cmds[] = {
 	{0x29,1,{0x48}},
 	{0x2A,1,{0x48}},
 	{0x2B,1,{0x1F}},
+	// GIP_L_GS
 	{0x2C,1,{0x01}},
 	{0x2D,1,{0x01}},
 	{0x2E,1,{0x00}},
@@ -236,6 +256,7 @@ static const struct LCM_init_cmd LF101_8001280_AMA_4LANE_init_cmds[] = {
 	{0x3F,1,{0x06}},
 	{0x40,1,{0x06}},
 	{0x41,1,{0x1F}},
+	// GIP_R_GS
 	{0x42,1,{0x02}},
 	{0x43,1,{0x02}},
 	{0x44,1,{0x00}},
@@ -258,6 +279,7 @@ static const struct LCM_init_cmd LF101_8001280_AMA_4LANE_init_cmds[] = {
 	{0x55,1,{0x07}},
 	{0x56,1,{0x07}},
 	{0x57,1,{0x1F}},
+	// GIP timing
 	{0x58,1,{0x40}},
 	{0x5B,1,{0x30}},
 	{0x5C,1,{0x16}},
@@ -282,14 +304,20 @@ static const struct LCM_init_cmd LF101_8001280_AMA_4LANE_init_cmds[] = {
 	{0x7A,1,{0x17}},
 	{0x7D,1,{0x14}},
 	{0x7E,1,{0x82}},
+	
+	// Page 4
 	{0xE0,1,{0x04}},
+
 	{0x00,1,{0x0E}},
 	{0x02,1,{0xB3}},
 	{0x09,1,{0x61}},
 	{0x0E,1,{0x48}},
+
+	// Page 0
 	{0xE0,1,{0x00}},
 	{0xE6,1,{0x02}},
 	{0xE7,1,{0x0C}},
+	// SLPOUT
 	{0x11,1,{0x00}},
 	{REGFLAG_DELAY,120,{}},
 };
@@ -591,7 +619,7 @@ static int lf_panel_set_init_cmds(struct mipi_dsi_device *dsi, const struct lf_p
 		dev_err(&dsi->dev, "failed to write COLMOD 0x%02X: %d\n", data->colmod_val, ret);
 		return ret;
 	}
-	ret = mipi_dsi_dcs_write(dsi, JD9365_CMD_DSI_INT0, &lane_command, 1);
+	ret = mipi_dsi_dcs_write(dsi, JD9365_CMD_DSI_INIT0, &lane_command, 1);
 	if (ret < 0) {
 		dev_err(&dsi->dev, "failed to write DSI_INT0 0x%02X: %d\n", lane_command, ret);
 		return ret;
@@ -617,13 +645,24 @@ static int lf_panel_set_init_cmds(struct mipi_dsi_device *dsi, const struct lf_p
             switch (init_cmd->cmd)
             {
             case MIPI_DCS_SET_ADDRESS_MODE:
-                is_cmd_overwritten = true;
-                //data->madctl_val = cmd->data[0];
+				if (init_cmd->data[0] != data->madctl_val) {
+                	is_cmd_overwritten = true;
+                	//data->madctl_val = cmd->data[0];
+				}
                 break;
             case MIPI_DCS_SET_PIXEL_FORMAT:
-                is_cmd_overwritten = true;
-                //data->colmod_val = cmd->data[0];
+				if (init_cmd->data[0] != data->colmod_val) {
+					is_cmd_overwritten = true;
+					//data->colmod_val = cmd->data[0];
+				}
                 break;
+			case JD9365_CMD_DSI_INIT0:
+				if (init_cmd->data[0] != lane_command)
+				{
+					is_cmd_overwritten = true;
+					//data->lanes = init_cmd->data[0];
+				}
+				break;
             default:
                 is_cmd_overwritten = false;
                 break;
