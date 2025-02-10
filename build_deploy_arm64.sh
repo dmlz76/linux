@@ -87,15 +87,21 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Copying Broadcom dtbs"
-sudo cp -u -v arch/arm64/boot/dts/broadcom/*.dtb ~/mnt/boot/
+if [ ! -d ~/mnt/boot/$KERNEL_NAME ]; then
+    mkdir ~/mnt/boot/$KERNEL_NAME
+fi
+sudo cp -u -v arch/arm64/boot/dts/broadcom/*.dtb ~/mnt/boot/$KERNEL_NAME/
 if [ $? -ne 0 ]; then
     echo "Failed to copy Broadcom dtbs"
     cleanup
     exit 1
 fi
 
-echo "Copying verlays"
-sudo cp -u -v arch/arm64/boot/dts/overlays/*.dtb* ~/mnt/boot/overlays/
+echo "Copying overlays"
+if [ ! -d ~/mnt/boot/$KERNEL_NAME/overlays ]; then
+    mkdir ~/mnt/boot/$KERNEL_NAME/overlays
+fi
+sudo cp -u -v arch/arm64/boot/dts/overlays/*.dtb* ~/mnt/boot/$KERNEL_NAME/overlays/
 if [ $? -ne 0 ]; then
     echo "Failed to copy overlays dtbs"
     cleanup
@@ -103,7 +109,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Copying overlays README"
-sudo cp -u -v arch/arm64/boot/dts/overlays/README ~/mnt/boot/overlays/
+sudo cp -u -v arch/arm64/boot/dts/overlays/README ~/mnt/boot/$KERNEL_NAME/overlays/
 if [ $? -ne 0 ]; then
     echo "Failed to copy overlays README"
     cleanup
