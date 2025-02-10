@@ -1,0 +1,84 @@
+/*
+ * Device Tree overlay to connect a K101-IM2BYL02 DSI panel to DSI1.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	compatible = "brcm,bcm2835";
+
+	fragment@0{
+		target = <&i2c0mux>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@1{
+		target = <&i2c0if>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@2{
+		target = <&i2c_csi_dsi>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			pca: pca@41 {
+				compatible = "nxp,pca9536";
+				reg = <0x41>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				status = "okay";
+			};
+		};
+	};
+
+
+	fragment@3 {
+		target-path = "/";
+		__overlay__ {
+			backlight: backlight {
+				compatible = "gpio-backlight";
+				gpios = <&pca 0 GPIO_ACTIVE_HIGH>;
+			};
+		};
+	};
+
+	fragment@4 {
+		target = <&dsi1>;
+		__overlay__{
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port {
+				dsi_out: endpoint {
+					remote-endpoint = <&panel_in>;
+				};
+			};
+
+			panel@0 {
+				compatible    = "feixin,k101-im2byl02";
+				status        = "okay";
+				reg           = <0>;
+				backlight     = <&backlight>;
+		        reset-gpios   = <&pca 1 GPIO_ACTIVE_LOW>;           
+
+				port {
+					panel_in: endpoint {
+						remote-endpoint = <&dsi_out>;
+					};
+				};
+			};
+		};
+	};
+
+};
