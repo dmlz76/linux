@@ -1671,9 +1671,12 @@ static int ili9881c_switch_page(struct ili9881c *ctx, u8 page)
 	u8 buf[4] = { 0xff, 0x98, 0x81, page };
 	int ret;
 
+	pr_debug("ili9881c_switch_page: page %u\n", page);
 	ret = mipi_dsi_dcs_write_buffer(ctx->dsi, buf, sizeof(buf));
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(&ctx->dsi->dev, "failed to write buffer: %d\n", ret);
 		return ret;
+	}
 
 	return 0;
 }
@@ -1683,23 +1686,29 @@ static int ili9881c_send_cmd_data(struct ili9881c *ctx, u8 cmd, u8 data)
 	u8 buf[2] = { cmd, data };
 	int ret;
 
+	pr_debug("ili9881c_send_cmd_data: cmd %02x data %02x\n", cmd, data);
 	ret = mipi_dsi_dcs_write_buffer(ctx->dsi, buf, sizeof(buf));
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(&ctx->dsi->dev, "failed to send cmd data: %d\n", ret);	
 		return ret;
+	}
 
 	return 0;
 }
 
 static int ili9881c_prepare(struct drm_panel *panel)
 {
+	pr_debug("ili9881c_prepare\n");
 	struct ili9881c *ctx = panel_to_ili9881c(panel);
 	unsigned int i;
 	int ret;
 
 	/* Power the panel */
 	ret = regulator_enable(ctx->power);
-	if (ret)
+	if (ret) {
+		dev_err(&ctx->dsi->dev, "failed to enable regulator: %d\n", ret);
 		return ret;
+	}
 	msleep(5);
 
 	/* And reset it */
@@ -1727,17 +1736,25 @@ static int ili9881c_prepare(struct drm_panel *panel)
 		return ret;
 
 	ret = mipi_dsi_dcs_set_tear_on(ctx->dsi, MIPI_DSI_DCS_TEAR_MODE_VBLANK);
-	if (ret)
+	if (ret) {
+		dev_err(&ctx->dsi->dev, "failed to set tear on: %d\n", ret);
 		return ret;
+	}
 
 	ret = mipi_dsi_dcs_exit_sleep_mode(ctx->dsi);
-	if (ret)
+	if (ret) {
+		dev_err(&ctx->dsi->dev, "failed to exit sleep mode: %d\n", ret);
 		return ret;
+	}
 
 	if (ctx->desc->flags & ILI9881_FLAGS_PANEL_ON_IN_PREPARE) {
 		msleep(120);
 
 		ret = mipi_dsi_dcs_set_display_on(ctx->dsi);
+		if (ret) {
+			dev_err(&ctx->dsi->dev, "failed to set display on: %d\n", ret);
+			return ret;
+		}
 	}
 
 	return 0;
@@ -1745,12 +1762,18 @@ static int ili9881c_prepare(struct drm_panel *panel)
 
 static int ili9881c_enable(struct drm_panel *panel)
 {
+	pr_debug("ili9881c_enable\n");
 	struct ili9881c *ctx = panel_to_ili9881c(panel);
+	int ret;
 
 	if (!(ctx->desc->flags & ILI9881_FLAGS_PANEL_ON_IN_PREPARE)) {
 		msleep(120);
 
-		mipi_dsi_dcs_set_display_on(ctx->dsi);
+		ret = mipi_dsi_dcs_set_display_on(ctx->dsi);
+		if (ret) {
+			dev_err(&ctx->dsi->dev, "failed to set display on: %d\n", ret);
+			return ret;
+		}
 	}
 
 	return 0;
@@ -1758,26 +1781,46 @@ static int ili9881c_enable(struct drm_panel *panel)
 
 static int ili9881c_disable(struct drm_panel *panel)
 {
+	pr_debug("ili9881c_disable\n");
 	struct ili9881c *ctx = panel_to_ili9881c(panel);
+	int ret;
 
-	if (!(ctx->desc->flags & ILI9881_FLAGS_PANEL_ON_IN_PREPARE))
-		mipi_dsi_dcs_set_display_off(ctx->dsi);
+	if (!(ctx->desc->flags & ILI9881_FLAGS_PANEL_ON_IN_PREPARE)) {
+		ret = mipi_dsi_dcs_set_display_off(ctx->dsi);
+		if (ret) {
+			dev_err(&ctx->dsi->dev, "failed to set display off: %d\n", ret);
+			return ret;
+		}
+	}
 
 	return 0;
 }
 
 static int ili9881c_unprepare(struct drm_panel *panel)
 {
+	pr_debug("ili9881c_unprepare\n");
 	struct ili9881c *ctx = panel_to_ili9881c(panel);
+	int ret;
 
 	if (!(ctx->desc->flags & ILI9881_FLAGS_NO_SHUTDOWN_CMDS)) {
-		if (ctx->desc->flags & ILI9881_FLAGS_PANEL_ON_IN_PREPARE)
-			mipi_dsi_dcs_set_display_off(ctx->dsi);
+		if (ctx->desc->flags & ILI9881_FLAGS_PANEL_ON_IN_PREPARE) {
+			ret = mipi_dsi_dcs_set_display_off(ctx->dsi);
+			if (ret) {
+				dev_err(&ctx->dsi->dev, "failed to set display off: %d\n", ret);			
+			}
+		}
 
-		mipi_dsi_dcs_enter_sleep_mode(ctx->dsi);
+		ret = mipi_dsi_dcs_enter_sleep_mode(ctx->dsi);
+		if (ret) {
+			dev_err(&ctx->dsi->dev, "failed to enter sleep mode: %d\n", ret);
+		}
 	}
 
-	regulator_disable(ctx->power);
+	ret = regulator_disable(ctx->power);
+	if (ret) {
+		dev_err(&ctx->dsi->dev, "failed to disable regulator: %d\n", ret);
+	}
+
 	gpiod_set_value_cansleep(ctx->reset, 1);
 
 	return 0;
@@ -1801,20 +1844,20 @@ static const struct drm_display_mode lhr050h41_default_mode = {
 };
 
 static const struct drm_display_mode k101_im2byl02_default_mode = {
-	.clock		= 69700,
+	.clock			= 71750, //69700,
 
-	.hdisplay	= 800,
+	.hdisplay		= 800,
 	.hsync_start	= 800 + 52,
-	.hsync_end	= 800 + 52 + 8,
-	.htotal		= 800 + 52 + 8 + 48,
+	.hsync_end		= 800 + 52 + 8,
+	.htotal			= 800 + 52 + 8 + 48,
 
-	.vdisplay	= 1280,
+	.vdisplay		= 1280,
 	.vsync_start	= 1280 + 16,
-	.vsync_end	= 1280 + 16 + 6,
-	.vtotal		= 1280 + 16 + 6 + 15,
+	.vsync_end		= 1280 + 16 + 6,
+	.vtotal			= 1280 + 16 + 6 + 15,
 
-	.width_mm	= 135,
-	.height_mm	= 217,
+	.width_mm		= 135,
+	.height_mm		= 217,
 };
 
 static const struct drm_display_mode nwe080_default_mode = {
@@ -1956,62 +1999,79 @@ static enum drm_panel_orientation ili9881c_get_orientation(struct drm_panel *pan
 }
 
 static const struct drm_panel_funcs ili9881c_funcs = {
-	.prepare	= ili9881c_prepare,
-	.unprepare	= ili9881c_unprepare,
-	.enable		= ili9881c_enable,
-	.disable	= ili9881c_disable,
-	.get_modes	= ili9881c_get_modes,
-	.get_orientation = ili9881c_get_orientation,
+    .prepare	= ili9881c_prepare,
+    .unprepare	= ili9881c_unprepare,
+    .enable		= ili9881c_enable,
+    .disable	= ili9881c_disable,
+    .get_modes	= ili9881c_get_modes,
+    .get_orientation = ili9881c_get_orientation,
 };
 
 static int ili9881c_dsi_probe(struct mipi_dsi_device *dsi)
 {
-	struct ili9881c *ctx;
-	int ret;
+    struct ili9881c *ctx;
+    int ret;
 
-	ctx = devm_kzalloc(&dsi->dev, sizeof(*ctx), GFP_KERNEL);
-	if (!ctx)
-		return -ENOMEM;
-	mipi_dsi_set_drvdata(dsi, ctx);
-	ctx->dsi = dsi;
-	ctx->desc = of_device_get_match_data(&dsi->dev);
+    pr_debug("ili9881c_dsi_probe: Allocating memory for ili9881c context\n");
+    ctx = devm_kzalloc(&dsi->dev, sizeof(*ctx), GFP_KERNEL);
+    if (!ctx)
+        return -ENOMEM;
 
-	ctx->panel.prepare_prev_first = true;
-	drm_panel_init(&ctx->panel, &dsi->dev, &ili9881c_funcs,
-		       DRM_MODE_CONNECTOR_DSI);
+    pr_debug("ili9881c_dsi_probe: Setting driver data\n");
+    mipi_dsi_set_drvdata(dsi, ctx);
+    ctx->dsi = dsi;
+    ctx->desc = of_device_get_match_data(&dsi->dev);
 
-	ctx->power = devm_regulator_get(&dsi->dev, "power");
-	if (IS_ERR(ctx->power))
-		return dev_err_probe(&dsi->dev, PTR_ERR(ctx->power),
-				     "Couldn't get our power regulator\n");
+    pr_debug("ili9881c_dsi_probe: Initializing DRM panel\n");
+    ctx->panel.prepare_prev_first = true;
+    drm_panel_init(&ctx->panel, &dsi->dev, &ili9881c_funcs,
+               DRM_MODE_CONNECTOR_DSI);
 
-	ctx->reset = devm_gpiod_get_optional(&dsi->dev, "reset", GPIOD_OUT_LOW);
-	if (IS_ERR(ctx->reset))
-		return dev_err_probe(&dsi->dev, PTR_ERR(ctx->reset),
-				     "Couldn't get our reset GPIO\n");
+    pr_debug("ili9881c_dsi_probe: Getting power regulator\n");
+    ctx->power = devm_regulator_get(&dsi->dev, "power");
+    if (IS_ERR(ctx->power))
+        return dev_err_probe(&dsi->dev, PTR_ERR(ctx->power),
+                     "Couldn't get our power regulator\n");
 
-	ret = of_drm_get_panel_orientation(dsi->dev.of_node, &ctx->orientation);
-	if (ret) {
-		dev_err(&dsi->dev, "%pOF: failed to get orientation: %d\n",
-			dsi->dev.of_node, ret);
-		return ret;
+    pr_debug("ili9881c_dsi_probe: Getting reset GPIO\n");
+    ctx->reset = devm_gpiod_get_optional(&dsi->dev, "reset", GPIOD_OUT_LOW);
+    if (IS_ERR(ctx->reset)) {
+        return dev_err_probe(&dsi->dev, PTR_ERR(ctx->reset),
+                     "Couldn't get our reset GPIO\n");
 	}
 
-	ret = drm_panel_of_backlight(&ctx->panel);
-	if (ret)
-		return ret;
+    pr_debug("ili9881c_dsi_probe: Getting panel orientation\n");
+    ret = of_drm_get_panel_orientation(dsi->dev.of_node, &ctx->orientation);
+    if (ret) {
+        dev_err(&dsi->dev, "%pOF: failed to get orientation: %d\n",
+            dsi->dev.of_node, ret);
+        return ret;
+    }
 
-	drm_panel_add(&ctx->panel);
+    pr_debug("ili9881c_dsi_probe: Getting backlight\n");
+    ret = drm_panel_of_backlight(&ctx->panel);
+    if (ret) {
+        dev_err(&dsi->dev, "failed to get backlight: %d\n", ret);
+        return ret;
+    }
 
-	dsi->mode_flags = ctx->desc->mode_flags;
-	dsi->format = MIPI_DSI_FMT_RGB888;
-	dsi->lanes = ctx->desc->lanes;
+    pr_debug("ili9881c_dsi_probe: Adding DRM panel\n");
+    drm_panel_add(&ctx->panel);
 
-	ret = mipi_dsi_attach(dsi);
-	if (ret)
-		drm_panel_remove(&ctx->panel);
+    pr_debug("ili9881c_dsi_probe: Setting DSI mode flags and format\n");
+    dsi->mode_flags = ctx->desc->mode_flags;
+    dsi->format = MIPI_DSI_FMT_RGB888;
+    dsi->lanes = ctx->desc->lanes;
 
-	return ret;
+    pr_debug("ili9881c_dsi_probe: Attaching DSI\n");
+    ret = mipi_dsi_attach(dsi);
+    if (ret) {
+        dev_err(&dsi->dev, "failed to attach dsi to host: %d\n", ret);
+        return ret;
+    }
+
+    pr_debug("ili9881c_dsi_probe: Probe successful\n");
+    return 0;
 }
 
 static void ili9881c_dsi_remove(struct mipi_dsi_device *dsi)
@@ -2037,8 +2097,9 @@ static const struct ili9881c_desc k101_im2byl02_desc = {
 	.init = k101_im2byl02_init,
 	.init_length = ARRAY_SIZE(k101_im2byl02_init),
 	.mode = &k101_im2byl02_default_mode,
-	.mode_flags = MIPI_DSI_MODE_VIDEO_SYNC_PULSE,
+	.mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_SYNC_PULSE,
 	.lanes = 4,
+	.flags = ILI9881_FLAGS_PANEL_ON_IN_PREPARE,
 };
 
 static const struct ili9881c_desc nwe080_desc = {
