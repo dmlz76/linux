@@ -10,7 +10,49 @@
 / {
 	compatible = "brcm,bcm2835";
 
-	fragment@0 {
+	fragment@0{
+		target = <&i2c0mux>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@1{
+		target = <&i2c0if>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@2{
+		target = <&i2c_csi_dsi>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			pca: pca@41 {
+				compatible = "nxp,pca9536";
+				reg = <0x41>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				status = "okay";
+			};
+		};
+	};
+
+
+	fragment@3 {
+		target-path = "/";
+		__overlay__ {
+			backlight: backlight {
+				compatible = "gpio-backlight";
+				gpios = <&pca 0 GPIO_ACTIVE_HIGH>;
+			};
+		};
+	};
+
+	fragment@4 {
 		target = <&dsi1>;
 		__overlay__{
 			status = "okay";
@@ -22,11 +64,12 @@
 				};
 			};
 
-			lf101_8001280_ama@0 {
+			panel@0 {
 				compatible    = "luckfox,lf101-8001280-ama";
 				status        = "okay";
 				reg           = <0>;
-		        reset-gpios   = <&gpio 17 GPIO_ACTIVE_LOW>;           
+				backlight     = <&backlight>;
+		        reset-gpios   = <&pca 1 GPIO_ACTIVE_LOW>;              
 				port {
 					panel_dsi_port: endpoint {
 						remote-endpoint = <&dsi_out_port>;

@@ -25,8 +25,9 @@
 
 #define LF_DSI_DRIVER_NAME "panel-lf-dsi-lf101"
 
-#define USE_POWER_REGULATOR 0
-#define USE_ORIENTATION 0
+#define USE_REGULATORS 0
+#define USE_ORIENTATION 1
+#define USE_BACKLIGHT 1
 #define PANEL_DCS_IN_PREPARE 1
 #define READ_PANEL_ID 0
 
@@ -65,8 +66,9 @@ struct lf_panel {
 	struct drm_panel base;
 	struct mipi_dsi_device *dsi;
 	const struct lf_panel_data *data;
-#if USE_POWER_REGULATOR
-	struct regulator *power;
+#if USE_REGULATORS
+	struct regulator *vdd;
+	struct regulator *vccio;
 #endif
 	struct gpio_desc *reset;
 #if USE_ORIENTATION
@@ -317,15 +319,24 @@ static const struct LCM_init_cmd LF101_8001280_AMA_4LANE_init_cmds[] = {
 	{0xE0,1,{0x00}},
 	{0xE6,1,{0x02}},
 	{0xE7,1,{0x0C}},
+
 	// SLPOUT
 	{0x11,1,{0x00}},
 	{REGFLAG_DELAY,120,{}},
+
+	// DSPON
+	{0x29,1,{0x00}},
+	{REGFLAG_DELAY,20,{}},
+
+	// TEON
+	{0x35,1,{0x00}},
 };
 
 static const struct lf_panel_data LF101_8001280_AMA_4LANE_data = {
 	.mode = &LF101_8001280_AMA_4LANE_mode,
 	.lanes = 4,
-	.mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST | MIPI_DSI_MODE_NO_EOT_PACKET, // | MIPI_DSI_MODE_LPM,
+	.mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST |
+			  MIPI_DSI_MODE_NO_EOT_PACKET,
     .madctl_val = 0x00, // RGB
     .colmod_val = 0x77, // RGB888
 	.init_cmds = LF101_8001280_AMA_4LANE_init_cmds,
@@ -557,7 +568,8 @@ static const struct LCM_init_cmd LF101_8001280_AMA_2LANE_init_cmds[] = {
 static const struct lf_panel_data LF101_8001280_AMA_2LANE_data = {
 	.mode = &LF101_8001280_AMA_2LANE_mode,
 	.lanes = 2,
-	.mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST | MIPI_DSI_MODE_NO_EOT_PACKET, // | MIPI_DSI_MODE_LPM,
+	.mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST |
+			  MIPI_DSI_MODE_NO_EOT_PACKET,
     .madctl_val = 0x00, // RGB
     .colmod_val = 0x77, // RGB888
 	.init_cmds = LF101_8001280_AMA_2LANE_init_cmds,
@@ -735,7 +747,7 @@ static int lf_panel_unprepare(struct drm_panel *panel)
 	if (!lfp->prepared)
 		return 0;
 
-#if PANEL_DCS_IN_PREPARE || USE_POWER_REGULATOR
+#if PANEL_DCS_IN_PREPARE || USE_REGULATORS
 	struct mipi_dsi_device *dsi = lfp->dsi;
 	int ret;
 #endif
@@ -755,15 +767,15 @@ static int lf_panel_unprepare(struct drm_panel *panel)
 		dev_err(&dsi->dev, "failed to enter sleep mode (%d)\n", ret);
 		return ret;
 	}
+	msleep(120);
 #endif
 
-	gpiod_set_value(lfp->reset, 1);
+	gpiod_set_value_cansleep(lfp->reset, 1);
 	msleep(120);
 
-#if USE_POWER_REGULATOR
-	ret = regulator_disable(lfp->power);
-	if (ret < 0)
-		dev_err(&dsi->dev, "regulator disable failed, %d\n", ret);
+#if USE_REGULATORS
+	regulator_disable(lfp->vdd);
+	regulator_disable(lfp->vccio);
 #endif
 
 	lfp->prepared = false;
@@ -778,28 +790,38 @@ static int lf_panel_prepare(struct drm_panel *panel)
 	if (lfp->prepared)
 		return 0;
 
-#if PANEL_DCS_IN_PREPARE || USE_POWER_REGULATOR
+#if PANEL_DCS_IN_PREPARE || USE_REGULATORS
 	struct mipi_dsi_device *dsi = lfp->dsi;
 	int ret;
 #endif
 
-#if USE_POWER_REGULATOR
-	/* Power the panel */
-	ret = regulator_enable(lfp->power);
+#if USE_REGULATORS
+	ret = regulator_enable(lfp->vccio);
+	if (ret)
+		return ret;
+	ret = regulator_enable(lfp->vdd);
 	if (ret)
 		return ret;
 	msleep(5);
 #endif
 
 	/* Reset the panel */
-	gpiod_set_value(lfp->reset, 1);
+#if 0
+	gpiod_set_value_cansleep(lfp->reset, 1);
 	msleep(5);
 
-	gpiod_set_value(lfp->reset, 0);
+	gpiod_set_value_cansleep(lfp->reset, 0);
 	msleep(10);
 
-	gpiod_set_value(lfp->reset, 1);
+	gpiod_set_value_cansleep(lfp->reset, 1);
 	msleep(120);
+#else
+	gpiod_set_value_cansleep(lfp->reset, 1);
+	msleep(20);
+
+	gpiod_set_value_cansleep(lfp->reset, 0);
+	msleep(120);
+#endif
 
 #if PANEL_DCS_IN_PREPARE
 	/* Initialize the panel */
@@ -817,12 +839,16 @@ static int lf_panel_prepare(struct drm_panel *panel)
 		goto poweroff;
 	}
 
+	msleep(125);
+
 	pr_debug("lf_panel_prepare: set display on\n");
 	ret = mipi_dsi_dcs_set_display_on(dsi);
 	if (ret) {
 		dev_err(&dsi->dev, "failed to turn display on (%d)\n", ret);
 		goto poweroff;
 	}
+
+	msleep(20);
 #endif
 
 	lfp->prepared = true;
@@ -831,10 +857,9 @@ static int lf_panel_prepare(struct drm_panel *panel)
 #if PANEL_DCS_IN_PREPARE
 poweroff:
 #endif
-#if USE_POWER_REGULATOR
-	ret = regulator_disable(lfp->power);
-	if (ret < 0)
-		dev_err(&dsi->dev, "regulator disable failed, %d\n", ret);
+#if USE_REGULATORS
+	regulator_disable(lfp->vdd);
+	regulator_disable(lfp->vccio);
 #endif
 #if PANEL_DCS_IN_PREPARE
 	return ret;	
@@ -954,20 +979,18 @@ static int lf_panel_probe(struct mipi_dsi_device *dsi)
 	lfp->dsi = dsi;
 	lfp->data = _lf_panel_data;
 
-#if USE_ORIENTATION
-	pr_debug("lf_panel_probe: getting orientation\n");
-	ret = of_drm_get_panel_orientation(dev->of_node, &lfp->orientation);
-	if (ret) {
-		dev_err_probe(dev, ret, "%pOF: failed to get orientation %d\n", dev->of_node, ret);
-		return ret;
+#if USE_REGULATORS
+	lfp->vdd = devm_regulator_get(dev, "vdd");
+	if (IS_ERR(lfp->vdd)) {
+		dev_err_probe(dev, PTR_ERR(lfp->vdd), "failed to get vdd regulator\n");
+		return PTR_ERR(lfp->vdd);
 	}
-#endif
 
-#if USE_POWER_REGULATOR
-	lfp->power = devm_regulator_get(&dsi->dev, "power");
-	if (IS_ERR(lfp->power))
-		return dev_err_probe(dev, PTR_ERR(lfp->power),
-				     "Couldn't get our power regulator\n");
+	lfp->vccio = devm_regulator_get(dev, "vccio");
+	if (IS_ERR(lfp->vccio)) {
+		dev_err_probe(dev, PTR_ERR(lfp->vccio), "failed to get vccio regulator\n");
+		return PTR_ERR(lfp->vccio);
+	}
 #endif
 
 	pr_debug("lf_panel_probe: getting reset GPIO\n");
@@ -977,9 +1000,33 @@ static int lf_panel_probe(struct mipi_dsi_device *dsi)
 		return PTR_ERR(lfp->reset);
 	}
 
+	if (gpiod_is_active_low(lfp->reset)) {
+		pr_debug("lf_panel_probe: reset GPIO is active low\n");
+	} else {
+		pr_debug("lf_panel_probe: reset GPIO is active high\n");
+	}
+
 	pr_debug("lf_panel_probe: initializing DRM panel\n");
 	lfp->base.prepare_prev_first = true;
 	drm_panel_init(&lfp->base, dev, &lf_panel_funcs, DRM_MODE_CONNECTOR_DSI);
+
+#if USE_ORIENTATION
+	pr_debug("lf_panel_probe: getting orientation\n");
+	ret = of_drm_get_panel_orientation(dev->of_node, &lfp->orientation);
+	if (ret) {
+		dev_err_probe(dev, ret, "%pOF: failed to get orientation %d\n", dev->of_node, ret);
+		return ret;
+	}
+#endif
+
+#if USE_BACKLIGHT
+    pr_debug("lf_panel_probe: getting backlight\n");
+    ret = drm_panel_of_backlight(&lfp->base);
+    if (ret) {
+        dev_err(&dsi->dev, "failed to get backlight: %d\n", ret);
+        return ret;
+    }
+#endif
 
 	/* This appears last, as it's what will unblock the DSI host
 	 * driver's component bind function.
