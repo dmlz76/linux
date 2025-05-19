@@ -47,7 +47,7 @@
 		__overlay__ {
 			backlight: backlight {
 				compatible = "gpio-backlight";
-				gpios = <&pca 0 GPIO_ACTIVE_HIGH>;
+				gpios = <&pca 0 GPIO_ACTIVE_LOW>;
 			};
 		};
 	};
@@ -65,7 +65,7 @@
 				};
 			};
 
-			panel@0 {
+			panel:panel@0 {
 				compatible    = "feixin,k101-im2byl02";
 				status        = "okay";
 				reg           = <0>;
@@ -81,4 +81,7 @@
 		};
 	};
 
+	__overrides__ {
+		rotation = <&panel>, "rotation:0";
+	};
 };
